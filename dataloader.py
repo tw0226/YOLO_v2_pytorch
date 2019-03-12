@@ -16,7 +16,7 @@ class MyDataset:
 
     def __getitem__(self, idx):
         # idx = self.list.index('000121')  # 000121
-        idx = 2
+        # idx = 2
         img = cv2.imread(self.folder_path + '/JPEGImages/' + self.list[idx] + ".jpg", cv2.IMREAD_COLOR)
         path = self.folder_path + '/JPEGImages/' + self.list[idx] + ".jpg"
 

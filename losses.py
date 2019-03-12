@@ -34,15 +34,16 @@ class DetectionLoss(nn.Module):
         num_class = 20
         #Making ground_truth
         grid_size = 13
-        gt = list(gt)
+        # gt = list(gt)
         gt_grid = torch.zeros(batch_size, 5 * (5 + num_class), grid_size, grid_size)
         # gt_onefile
         for batch in range(batch_size):
             # print(batch, gt[batch])
             grid = torch.zeros([5 * (5 + num_class), grid_size, grid_size]).cuda()
 
-            gt_one = gt[batch]
-            gt_one = gt_one.split(' ')
+            # gt_one = gt[batch]
+            gt_one = gt
+            # gt_one = gt_one.split(' ')
             # print(gt_one)
             count = 0
             for one_obj in range(0, len(gt_one), 5):
@@ -51,7 +52,11 @@ class DetectionLoss(nn.Module):
                 # print(x, y, w, h, class_id, count, grid[(count*25)+4, :, :])
 
                 # GT의 1 grid 에서 객체가 여러 개일 때 grid 채널 이동
+
+
                 while grid[(count * 25) + 4, int(x * grid_size), int(y * grid_size)] == 1:
+                    if count == 4:
+                        break
                     count += 1
 
 
@@ -125,7 +130,7 @@ class DetectionLoss(nn.Module):
                 loss_grid[_b, 5:, _x, _y] = detection_result[_b, (25 * box) + bbox: (25 * box) + (bbox + num_class), _x, _y] = detection_result[_b,(25*box)+4, _x, _y].unsqueeze(1).clone() * detection_result[_b, (25 * box) + bbox: (25 * box) + (bbox + num_class), _x, _y].clone()
                 loss_grid[_b, :5, _x, _y] = detection_result[_b, :5, _x, _y].clone()
 
-                detection_result[_b, (25*box)+5:, _x, _y] = detection_result[_b, (25*box)+4, _x, _y].unsqueeze(1) * detection_result[_b, (25*box)+5:, _x, _y]
+                # detection_result[_b, (25*box)+5:, _x, _y] = detection_result[_b, (25*box)+4, _x, _y].unsqueeze(1) * detection_result[_b, (25*box)+5:, _x, _y]
 
         detection_result = detection_result.cuda()
         lambda_coord = 5.0
@@ -134,28 +139,28 @@ class DetectionLoss(nn.Module):
         # c_x, c_y, w, h , conf, class0, class1
         # obj가 있는 부분
         one_img_obj, x_obj, y_obj = np.where(gt_grid[:, 4, :, :] == 1)
-        # for box in range(0, 125, 25):
-        obj_loss += lambda_coord * (mse(loss_grid[one_img_obj, 0, x_obj, y_obj], gt_grid[one_img_obj, 0, x_obj, y_obj]) +
-                                    mse(loss_grid[one_img_obj, 1, x_obj, y_obj], gt_grid[one_img_obj, 1, x_obj, y_obj]) +
-                                    mse(loss_grid[one_img_obj, 2, x_obj, y_obj], gt_grid[one_img_obj, 2, x_obj, y_obj]) +
-                                    mse(loss_grid[one_img_obj, 3, x_obj, y_obj], gt_grid[one_img_obj, 3, x_obj, y_obj])
-                                    ) + \
-                    mse(detection_result[one_img_obj, 4, x_obj, y_obj], gt_grid[one_img_obj, 4, x_obj, y_obj])
+        for box in range(0, 125, 25):
+            obj_loss += lambda_coord * (mse(detection_result[one_img_obj, box+0, x_obj, y_obj], gt_grid[one_img_obj, 0, x_obj, y_obj]) +
+                                        mse(detection_result[one_img_obj, box+1, x_obj, y_obj], gt_grid[one_img_obj, 1, x_obj, y_obj]) +
+                                        mse(detection_result[one_img_obj, box+2, x_obj, y_obj], gt_grid[one_img_obj, 2, x_obj, y_obj]) +
+                                        mse(detection_result[one_img_obj, box+3, x_obj, y_obj], gt_grid[one_img_obj, 3, x_obj, y_obj])
+                                        ) + \
+                        mse(detection_result[one_img_obj, box+4, x_obj, y_obj], gt_grid[one_img_obj, 4, x_obj, y_obj])
 
         # obj가 없는 부분
         no_obj = []
         one_img_noobj, x_noobj, y_noobj = np.where(gt_grid[:, 4, :, :] != 1)
-        # for box in range(0, 125, 25):
-        if len(one_img_noobj) != 0:
-            no_obj_loss += lambda_noobj * mse(loss_grid[one_img_noobj, 4, x_noobj, y_noobj], gt_grid[one_img_noobj, 4, x_noobj, y_noobj])
+        for box in range(0, 125, 25):
+            if len(one_img_noobj) != 0:
+                no_obj_loss += lambda_noobj * mse(detection_result[one_img_noobj, box+4, x_noobj, y_noobj], gt_grid[one_img_noobj, 4, x_noobj, y_noobj])
 
         # probability of Class
         confidence = 0
         one_img_obj, x_obj, y_obj = np.where(gt_grid[:, 4, :, :] == 1)
 
-        # for box in range(0, 125, 25):
-        if len(one_img_obj) != 0:
-            confidence += mse(loss_grid[one_img_obj, 5:25, x_obj, y_obj], gt_grid[one_img_obj, 5:25, x_obj, y_obj])
+        for box in range(0, 125, 25):
+            if len(one_img_obj) != 0:
+                confidence += mse(detection_result[one_img_obj, box+5:box+25, x_obj, y_obj], gt_grid[one_img_obj, box+5:box+25, x_obj, y_obj])
 
 
         obj_loss = obj_loss.mean()

@@ -20,7 +20,7 @@ def run_train():
     train_dataset = MyDataset(folder_path=folder_path+'VOC2012_trainval', train_category='train')
     val_dataset = MyDataset(folder_path=folder_path+'VOC2012_trainval', train_category='val')
     test_dataset = MyDataset(folder_path=folder_path + 'VOC2007_test', train_category='test')
-    batch_size = 16
+    batch_size = 8
     train_data_loader = DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True, num_workers=4)
     val_data_loader = DataLoader(dataset=val_dataset, batch_size=batch_size, shuffle=True, num_workers=4)
     test_data_loader = DataLoader(dataset=test_dataset, batch_size=batch_size, shuffle=True, num_workers=4)
@@ -93,7 +93,7 @@ def run_train():
             epoch_loss.append(loss.item())
             if it % 300 == 0 and it > 0:
 
-                print("Step {0} : Iteration [{1}/{2}], Loss : {3:0.4f}, {4:0.4f}, {5:0.4f}, {6:0.4f}".format(epoch, it, len(train_data_loader), np.mean(epoch_loss),
+                print("Step {0} : Iteration [{1}/{2}], Loss : {3:0.4f}, {4:0.4f}, {5:0.4f}, {6:0.4f}".format(epoch+1, it, len(train_data_loader), np.mean(epoch_loss),
                                                                                                              loss1, loss2, conf))
                 # pred, pred_img = NonMaxSupression(y_pred, path, grid_size)
                 # print(pred.shape, pred_img.shape)
@@ -101,16 +101,16 @@ def run_train():
                 # cv.waitKey(0)
 
         val_loss.append(np.mean(epoch_loss))
-        print("Epoch : {0} / {1} \t Loss : {2:0.4f} {3:0.4f}, {4:0.4f}, {5:0.4f}".format(epoch, training_epoch, np.mean(epoch_loss), loss1, loss2, conf))
+        print("Epoch : {0} / {1} \t Loss : {2:0.4f} {3:0.4f}, {4:0.4f}, {5:0.4f}".format(epoch+1, training_epoch, np.mean(epoch_loss), loss1, loss2, conf))
         plt.plot(x_line, train_loss, 'r-', label='train')
         plt.plot(x_line, val_loss, 'b-', label='val')
         plt.xlabel('Epoch')
         plt.ylabel('Loss')
-        plt.title('YOLO_v1_tiny')
+        plt.title('YOLO_v2')
         # plt.show()
         plt.savefig('YOLO_v2_loss.png', dpi=300)
 
-        torch.save(my_model.state_dict(), 'Weights/YOLO_v2_tiny_{}.pt'.format(epoch + 1))
+        torch.save(my_model.state_dict(), 'Weights/YOLO_v2_{}.pt'.format(epoch + 1))
 
 if __name__=="__main__":
     run_train()
