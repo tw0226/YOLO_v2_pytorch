@@ -171,7 +171,7 @@ def label_to_grid(label):
     return grid
 def run_demo(training):
     my_model = model.YOLO_v2().cuda()
-    state_dict = torch.load('./Weights/YOLO_v2_10.pt')
+    state_dict = torch.load('./Weights/YOLO_v2_20.pt')
     my_model.load_state_dict(state_dict)
     my_model.eval()
 
@@ -193,9 +193,7 @@ def run_demo(training):
         optimizer = optim.Adam(my_model.parameters(), lr=1e-3, weight_decay=1e-5)
         criterion = losses.DetectionLoss().cuda()
         epoch_loss = []
-
     else:
-
         training_epoch = 1
         my_model.eval()
 
@@ -225,9 +223,10 @@ def run_demo(training):
         y_pred_img = post_processing_boxes(y_pred, img)
         cv.imshow("Ground Truth", test_image)
         cv.imshow("Prediction", y_pred_img)
-        optimizer.zero_grad()
-        loss.backward()
-        # cv.waitKey(0)
+        if training:
+            optimizer.zero_grad()
+            loss.backward()
+        cv.waitKey(0)
 
 if __name__=="__main__":
-    run_demo(training=True)
+    run_demo(training=False)

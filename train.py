@@ -29,7 +29,7 @@ def run_train():
     my_model.train()
     # my_model = torch.nn.DataParallel(model.YOLO_v1(), device_ids=[0]).cuda()
     # optimizer = optim.SGD(my_model.parameters(), lr=1e-3, momentum=0.9, weight_decay=5e-4)
-    optimizer = optim.Adam(my_model.parameters(), lr=1e-4, weight_decay=1e-5)
+    optimizer = optim.Adam(my_model.parameters(), lr=1e-3, weight_decay=1e-5)
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
     # scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer=optimizer, patience=5)
     training_epoch = 135
