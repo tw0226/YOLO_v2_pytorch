@@ -57,50 +57,58 @@ def post_processing_boxes(y_pred, test_image, grid_size=13):
     return_img = torch.zeros(test_image.shape)
     return_img = return_img.permute(0,2,3,1)
 
-    for batch in range(y_pred.shape[0]):
-        y_pred_batch = y_pred[batch]
-        img = test_image[batch].clone()
-        img = img.permute(1,2,0)
-        img = img.data.cpu().numpy()
-        box_pred = None
-        for x in range(grid_size):
-            for y in range(grid_size):
-                for box in range(0, 125, 25):
-                    y_pred_batch[box + 0, x, y] = int((y_pred_batch[box + 0, x, y] + x) * width / grid_size)
-                    y_pred_batch[box + 1, x, y] = int((y_pred_batch[box + 1, x, y] + y) * height / grid_size)
-                    if int(y_pred_batch[box + 2, x, y] * width) > width:
-                        y_pred_batch[box + 2, x, y] = width
-                    else:
-                        y_pred_batch[box + 2, x, y] = int(y_pred_batch[box + 2, x, y] * width)
-                    if int(y_pred_batch[box + 3, x, y] * height) > height:
-                        y_pred_batch[box + 3, x, y] = height
-                    else:
-                        y_pred_batch[box + 3, x, y] = int(y_pred_batch[box + 3, x, y] * height)
+    img = test_image.clone()
+    img = img.permute(0, 2, 3, 1)
+    img = img.data.cpu().numpy()
+    y_pred = y_pred.data.cpu().numpy()
+    box_pred = None
+    for x in range(grid_size):
+        for y in range(grid_size):
+            for box in range(0, 125, 25):
+                y_pred[:, box + 0, x, y] = ((y_pred[:, box + 0, x, y] + x) * width / grid_size).astype(int)
+                y_pred[:, box + 1, x, y] = ((y_pred[:, box + 1, x, y] + x) * height / grid_size).astype(int)
 
-        for box in range(0, 125, 25):
-            if box_pred is None:
-                box_pred = y_pred_batch[:25, :, :].unsqueeze(3)
-            else:
-                box_pred = torch.cat((box_pred, y_pred_batch[box:box+25, :, :].unsqueeze(3)), 3)
+                # over_index = np.where(y_pred[:, box + 2, x, y] * width > width)
+                # if len(over_index) !=0:
+                #
+                # if y_pred[:, box + 2, x, y] * width > width:
+                #     y_pred[:, box + 2, x, y] = width
+                # else:
+                y_pred[:, box + 2, x, y] = (y_pred[:, box + 2, x, y] * width).astype(int)
+                # if int(y_pred[:, box + 3, x, y] * height) > height:
+                #     y_pred[:, box + 3, x, y] = height
+                # else:
+                y_pred[:, box + 3, x, y] = (y_pred[:, box + 3, x, y] * height).astype(int)
 
-        box_pred = box_pred.permute(3, 1, 2, 0)
-        box_pred = box_pred.reshape(5*13*13, 25)
-        boxes = box_pred[:, :5]
-        scores_of_class = box_pred[:, 5:]
-        under_threshold = np.where(scores_of_class<0.3)
-        scores_of_class[under_threshold] = 0
-        scores_of_class = scores_of_class.data.cpu().numpy()
-        boxes = boxes.data.cpu().numpy()
+    for box in range(0, 125, 25):
+        if box_pred is None:
+            box_pred = np.expand_dims(y_pred[:, :25, :, :], axis=4)
+            # box_pred = y_pred[:, :25, :, :].unsqueeze(3)
+        else:
+            y_pred_concat = np.expand_dims(y_pred[:, :25, :, :], axis=4)
+            box_pred = np.concatenate((box_pred, y_pred_concat), axis=4)
+            # box_pred = torch.cat((box_pred, y_pred[:, box:box+25, :, :].unsqueeze(3)), 3)
+    box_pred = np.transpose(box_pred, (0, 4, 1, 2, 3))
+    # box_pred = box_pred.permute(3, 1, 2, 0)
+    box_pred = box_pred.reshape(-1, 5*13*13, 25)
+
+    boxes = box_pred[:, :, :5]
+    scores_of_class = box_pred[:, :, 5:]
+    under_threshold = np.where(scores_of_class<0.3)
+    scores_of_class[under_threshold] = 0
+    # scores_of_class = scores_of_class.data.cpu().numpy()
+    # boxes = boxes.data.cpu().numpy()
+    for batch in range(batch_size):
         one_label_pred = []
         for index in range(20):
-            box_list = nms(boxes, scores_of_class[:, index], threshold=0.5)
+            box_list = nms(boxes[batch], scores_of_class[batch, :, index], threshold=0.5)
             false = np.where(box_list == False)
             for box in range(5*13*13):
                 if box_list[box] == False:
                     continue
-                x, y, w, h = boxes[box, 0], boxes[box, 1], boxes[box, 2], boxes[box, 3]
-                index = np.argmax(scores_of_class[box, :])
-                score = np.max(scores_of_class[box, :])
+                x, y, w, h = boxes[batch, box, 0], boxes[batch, box, 1], boxes[batch, box, 2], boxes[batch, box, 3]
+                index = np.argmax(scores_of_class[batch, box, :])
+                score = np.max(scores_of_class[batch, box, :])
                 if score > 0:
                     one_label_pred.append([x,y,w,h, index])
                     # print(category[index], score)
@@ -109,11 +117,10 @@ def post_processing_boxes(y_pred, test_image, grid_size=13):
                     pt1 = int(x - w / 2), int(y - h / 2)
                     pt2 = int(x + w / 2), int(y + h / 2)
                     # print(scores_of_class, cls, score)
-
                     img = cv.rectangle(img=img, pt1=pt1, pt2=pt2, color=(colors[index]))
                     # print(cls, box_index, max_index, score)
                     cv.putText(img, category[index], pt1, cv.FONT_HERSHEY_TRIPLEX, 0.4, color=colors[index])
-        return_img[batch] = torch.from_numpy(img)
+        return_img = torch.from_numpy(img)
         label_pred.append(one_label_pred)
     return return_img, label_pred
 
@@ -167,14 +174,14 @@ def run_train():
 
 
             img = x.clone()
-            y_pred_img, y_pred_label = post_processing_boxes(y_pred, img)
-            for batch in range(batch_size):
-                gt_batch_one = np.asarray(gt[batch].split(' '), dtype=np.float32)
-                pred_batch_one = np.asarray(y_pred_label[batch], dtype=np.float32)
-                gt_batch_one = gt_batch_one.reshape(-1,5)
-                correct, total = compute_iou_between_label(gt_batch_one, pred_batch_one)
-                sum_correct+=correct
-                sum+=total
+            # y_pred_img, y_pred_label = post_processing_boxes(y_pred, img)
+            # for batch in range(batch_size):
+            #     gt_batch_one = np.asarray(gt[batch].split(' '), dtype=np.float32)
+            #     pred_batch_one = np.asarray(y_pred_label[batch], dtype=np.float32)
+            #     gt_batch_one = gt_batch_one.reshape(-1,5)
+            #     correct, total = compute_iou_between_label(gt_batch_one, pred_batch_one)
+            #     sum_correct+=correct
+            #     sum+=total
             # img = cv.imread(path, cv.IMREAD_COLOR)
             # height, width, c = img.shape
             # gt = [y[0]]
@@ -199,7 +206,7 @@ def run_train():
                 # pred, pred_img, pred_box = NonMaxSupression(y_pred, path, grid_size)
                 # cv.imshow("GroundTruth", img)
                 # cv.imshow("Prediction", pred_img)
-                cv.waitKey(0)
+                # cv.waitKey(0)
             optimizer.zero_grad()
             loss.backward()
             scheduler.optimizer.step()

@@ -87,6 +87,8 @@ def post_processing_boxes(y_pred, test_image, grid_size=13):
     height, width, c = test_image.shape
     img = test_image.copy()
     label_pred = []
+
+
     for batch in range(y_pred.shape[0]):
         y_pred = y_pred[batch]
         box_pred = None
