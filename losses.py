@@ -132,7 +132,7 @@ class DetectionLoss(nn.Module):
                                     mse(loss_grid[one_img_obj, 2, x_obj, y_obj], gt_grid[one_img_obj, 2, x_obj, y_obj]) +
                                     mse(loss_grid[one_img_obj, 3, x_obj, y_obj], gt_grid[one_img_obj, 3, x_obj, y_obj])
                                     ) + \
-                    mse(detection_result[one_img_obj, 4, x_obj, y_obj], gt_grid[one_img_obj, 4, x_obj, y_obj])
+                    mse(loss_grid[one_img_obj, 4, x_obj, y_obj], gt_grid[one_img_obj, 4, x_obj, y_obj])
 
         # obj가 없는 부분
         no_obj = []

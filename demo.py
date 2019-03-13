@@ -54,11 +54,34 @@ def compute_iou(boxes, box):
     iou = intersection / (areas + area - intersection)
     return iou
 
-def compute_iou_between_label(label, pred_label):
-    for one_label in label:
-        print(one_label)
-        # for one_pred_label in pred_label:
+def compute_iou_box(box1, box2):
+    area2 = (box2[2] - box2[0] + 1) * (box2[3] - box2[1] + 1)
+    area1 = (box1[2] - box1[0] + 1) * (box1[3] - box1[1] + 1)
+    xx1 = np.maximum(box1[0], box2[0])
+    yy1 = np.maximum(box1[1], box2[1])
+    xx2 = np.minimum(box1[2], box2[2])
+    yy2 = np.minimum(box1[3], box2[3])
+    # print(xx2, xx1, yy2, yy1)
+    w = np.maximum(0, xx2 - xx1 + 1)
+    h = np.maximum(0, yy2 - yy1 + 1)
 
+    intersection = w * h
+    iou = intersection / (area2 + area1 - intersection)
+    return iou
+
+def compute_iou_between_label(label, pred_label):
+    correct=0
+    total=len(label)//5
+    for label_index in range(len(label), 5):
+        box1 = [label[label_index + 0], label[label_index+1], label[label_index+2], label[label_index+3], label[label_index+4]]
+        for pred_index in range(len(pred_label), 5):
+            box2 = [pred_label[pred_index + 0], pred_label[pred_index + 1],
+                    pred_label[pred_index + 2], pred_label[pred_index + 3], pred_label[pred_index + 4]]
+
+            iou = compute_iou_box(box1,box2)
+            if iou>0.5 and box1[4] == box2[4]:
+                correct+=1
+    return correct, total
 
 def post_processing_boxes(y_pred, test_image, grid_size=13):
     height, width, c = test_image.shape
@@ -191,7 +214,7 @@ def run_demo(training):
     test_loss = []
     accuracy = 0
     filepath = 'D:/DATASET/VOC_Dataset/VOC2012_trainval'
-    image_name = '2007_000063'
+    image_name = '2007_000121'
     
     test_image = cv.imread(filepath+'/JPEGImages/'+image_name+'.jpg', cv.IMREAD_COLOR)
     height, width, c = test_image.shape
@@ -226,18 +249,20 @@ def run_demo(training):
             pt2 = int((x + w / 2) * int(width)), int((y + h / 2) * int(height))
             test_image = cv.rectangle(img=test_image, pt1=pt1, pt2=pt2, color=colors[class_id])
             cv.putText(test_image, category[class_id], pt1, cv.FONT_HERSHEY_TRIPLEX, 0.6, color=colors[class_id])
-        y_pred_img, y_pred_label = post_processing_boxes(y_pred, img)
+        y_pred_img, y_pred_label = post_processing_boxes(y_pred.clone(), img)
 
+        correct, total = compute_iou_between_label(label, y_pred_label)
         if training:
-            optimizer.zero_grad()
             loss, loss1, loss2, conf = criterion(y_pred, list_label)
+            loss = loss.cuda()
+            optimizer.zero_grad()
             loss.backward()
             optimizer.step()
             epoch_loss.append(loss.item())
-            if epoch % 10 == 0:  # and it > 0:
-                print("Step {0}/{1} Loss : {2:0.4f}, {3:0.4f}, {4:0.4f}, {5:0.4f}".format(epoch, training_epoch,
-                                                                 np.mean(epoch_loss), loss1, loss2, conf))
-                print(y_pred_label)
+            if epoch % 1 == 0:  # and it > 0:
+                print("Step {0}/{1} Loss : {2:0.4f}, {3:0.4f}, {4:0.4f}, {5:0.4f} Accuracy : {6:0.2f} {7}/{8} ".format(epoch, training_epoch,
+                                                                 np.mean(epoch_loss), loss1, loss2, conf, correct/total, correct, total))
+
 
             if epoch % 100 == 0:
                 cv.imwrite('{0}_{1}.jpg'.format(image_name, epoch), y_pred_img)

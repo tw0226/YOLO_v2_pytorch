@@ -47,6 +47,7 @@ def compute_iou(boxes, box):
     h = np.maximum(0, yy2 - yy1 + 1)
 
     intersection = w * h
+    # np.seterr(divide='ignore', invalid='ignore')
     iou = intersection / (areas + area - intersection)
     return iou
 
@@ -116,6 +117,19 @@ def post_processing_boxes(y_pred, test_image, grid_size=13):
         label_pred.append(one_label_pred)
     return return_img, label_pred
 
+def compute_iou_between_label(label, pred_label):
+    correct=0
+    total = len(label)
+    for label_index in range(len(label)):
+        box1 = [label[label_index][0], label[label_index][1], label[label_index][2], label[label_index][3], label[label_index][4]]
+        iou = compute_iou(pred_label, box1)
+        indices = np.where(iou>0.5)
+        # print(index)
+        for index in indices:
+            if box1[4] == pred_label[index, 4]:
+                correct+=1
+    return correct, total
+
 def run_train():
     learning_rate=1e-3
     folder_path = "D:/Dataset/VOC_Dataset/"
@@ -137,7 +151,7 @@ def run_train():
     criterion = losses.DetectionLoss().cuda()
     train_loss = []
     val_loss = []
-
+    sum_correct, sum= 0, 0
     for epoch in range(training_epoch):
         x_line = [i+1 for i in range(epoch+1)]
         epoch_loss = []
@@ -148,15 +162,19 @@ def run_train():
             path = data[2][0]
             y_pred = my_model(x).cuda()
             gt = list(y)
-            print(gt)
             loss, loss1, loss2, conf = criterion(y_pred, y)
-            loss.cuda()
+            loss = loss.cuda()
 
 
             img = x.clone()
             y_pred_img, y_pred_label = post_processing_boxes(y_pred, img)
-            print(y_pred_label)
-
+            for batch in range(batch_size):
+                gt_batch_one = np.asarray(gt[batch].split(' '), dtype=np.float32)
+                pred_batch_one = np.asarray(y_pred_label[batch], dtype=np.float32)
+                gt_batch_one = gt_batch_one.reshape(-1,5)
+                correct, total = compute_iou_between_label(gt_batch_one, pred_batch_one)
+                sum_correct+=correct
+                sum+=total
             # img = cv.imread(path, cv.IMREAD_COLOR)
             # height, width, c = img.shape
             # gt = [y[0]]
@@ -176,8 +194,8 @@ def run_train():
 
             epoch_loss.append(loss.item())
             if it % 300 == 0 : #and it > 0:
-                print("Step {0} : Iteration [{1}/{2}], Loss : {3:0.4f}, {4:0.4f}, {5:0.4f}, {6:0.4f}".format(epoch, it, len(train_data_loader), np.mean(epoch_loss),
-                                                                                                             loss1, loss2, conf))
+                print("Step {0}/{1} Loss : {2:0.4f}, {3:0.4f}, {4:0.4f}, {5:0.4f} Accuracy : {6:0.2f} {7}/{8} ".format(it, len(train_data_loader),
+                            np.mean(epoch_loss), loss1, loss2, conf, sum_correct / sum, sum_correct, sum))
                 # pred, pred_img, pred_box = NonMaxSupression(y_pred, path, grid_size)
                 # cv.imshow("GroundTruth", img)
                 # cv.imshow("Prediction", pred_img)
@@ -200,6 +218,7 @@ def run_train():
             loss.cuda()
             epoch_loss.append(loss.item())
             y_pred_img, y_pred_label = post_processing_boxes(y_pred, img)
+
 
             if it % 300 == 0 and it > 0:
 
