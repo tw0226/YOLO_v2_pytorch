@@ -54,60 +54,71 @@ def compute_iou(boxes, box):
     iou = intersection / (areas + area - intersection)
     return iou
 
+def compute_iou_between_label(label, pred_label):
+    for one_label in label:
+        print(one_label)
+        # for one_pred_label in pred_label:
+
+
 def post_processing_boxes(y_pred, test_image, grid_size=13):
     height, width, c = test_image.shape
     img = test_image.copy()
-    y_pred = y_pred[0]
-    box_pred = None
-    for x in range(grid_size):
-        for y in range(grid_size):
-            for box in range(0, 125, 25):
+    label_pred = []
+    for batch in range(y_pred.shape[0]):
+        y_pred = y_pred[batch]
+        box_pred = None
+        for x in range(grid_size):
+            for y in range(grid_size):
+                for box in range(0, 125, 25):
+                    y_pred[box + 0, x, y] = int((y_pred[box + 0, x, y] + x) * width / grid_size)
+                    y_pred[box + 1, x, y] = int((y_pred[box + 1, x, y] + y) * height / grid_size)
+                    if int(y_pred[box + 2, x, y] * width) > width:
+                        y_pred[box + 2, x, y] = width
+                    else:
+                        y_pred[box + 2, x, y] = int(y_pred[box + 2, x, y] * width)
+                    if int(y_pred[box + 3, x, y] * height) > height:
+                        y_pred[box + 3, x, y] = height
+                    else:
+                        y_pred[box + 3, x, y] = int(y_pred[box + 3, x, y] * height)
 
-                y_pred[box + 0, x, y] = int((y_pred[box + 0, x, y] + x) * width / grid_size)
-                y_pred[box + 1, x, y] = int((y_pred[box + 1, x, y] + y) * height / grid_size)
-                if int(y_pred[box + 2, x, y] * width) > width:
-                    y_pred[box + 2, x, y] = width
-                else:
-                    y_pred[box + 2, x, y] = int(y_pred[box + 2, x, y] * width)
-                if int(y_pred[box + 3, x, y] * height) > height:
-                    y_pred[box + 3, x, y] = height
-                else:
-                    y_pred[box + 3, x, y] = int(y_pred[box + 3, x, y] * height)
+        for box in range(0, 125, 25):
+            if box_pred is None:
+                box_pred = y_pred[:25, :, :].unsqueeze(3)
+            else:
+                box_pred = torch.cat((box_pred, y_pred[box:box+25, :, :].unsqueeze(3)), 3)
+        box_pred = box_pred.permute(3, 1, 2, 0)
 
-    for box in range(0, 125, 25):
-        if box_pred is None:
-            box_pred = y_pred[:25, :, :].unsqueeze(3)
-        else:
-            box_pred = torch.cat((box_pred, y_pred[box:box+25, :, :].unsqueeze(3)), 3)
-    box_pred = box_pred.permute(3, 1, 2, 0)
+        box_pred = box_pred.reshape(5*13*13, 25)
+        boxes = box_pred[:, :5]
+        scores_of_class = box_pred[:, 5:]
+        under_threshold = np.where(scores_of_class<0.3)
+        scores_of_class[under_threshold] = 0
+        scores_of_class = scores_of_class.data.cpu().numpy()
+        boxes = boxes.data.cpu().numpy()
+        one_label_pred = []
+        for index in range(20):
+            box_list = nms(boxes, scores_of_class[:, index], threshold=0.5)
+            false = np.where(box_list == False)
+            for box in range(5*13*13):
+                if box_list[box] == False:
+                    continue
+                x, y, w, h = boxes[box, 0], boxes[box, 1], boxes[box, 2], boxes[box, 3]
+                index = np.argmax(scores_of_class[box, :])
+                score = np.max(scores_of_class[box, :])
+                if score > 0:
+                    one_label_pred.append([x,y,w,h, index])
+                    # print(category[index], score)
+                    # print(scores[box, :], category[index], x, y, w, h)
 
-    box_pred = box_pred.reshape(5*13*13, 25)
-    boxes = box_pred[:, :5]
-    scores_of_class = box_pred[:, 5:]
-    under_threshold = np.where(scores_of_class<0.2)
-    scores_of_class[under_threshold] = 0
-    scores_of_class = scores_of_class.data.cpu().numpy()
-    boxes = boxes.data.cpu().numpy()
-    for index in range(20):
-        box_list = nms(boxes, scores_of_class[:, index], threshold=0.5)
-        false = np.where(box_list == False)
-        for box in range(5*13*13):
-            if box_list[box] == False:
-                continue
-            x, y, w, h = boxes[box, 0], boxes[box, 1], boxes[box, 2], boxes[box, 3]
-            index = np.argmax(scores_of_class[box, :])
-            score = np.max(scores_of_class[box, :])
-            if score > 0:
-                # print(scores[box, :], category[index], x, y, w, h)
+                    pt1 = int(x - w / 2), int(y - h / 2)
+                    pt2 = int(x + w / 2), int(y + h / 2)
+                    # print(scores_of_class, cls, score)
 
-                pt1 = int(x - w / 2), int(y - h / 2)
-                pt2 = int(x + w / 2), int(y + h / 2)
-                # print(scores_of_class, cls, score)
-
-                img = cv.rectangle(img=img, pt1=pt1, pt2=pt2, color=(colors[index]))
-                # print(cls, box_index, max_index, score)
-                cv.putText(img, category[index], pt1, cv.FONT_HERSHEY_TRIPLEX, 0.4, color=colors[index])
-    return img
+                    img = cv.rectangle(img=img, pt1=pt1, pt2=pt2, color=(colors[index]))
+                    # print(cls, box_index, max_index, score)
+                    cv.putText(img, category[index], pt1, cv.FONT_HERSHEY_TRIPLEX, 0.4, color=colors[index])
+        label_pred.append(one_label_pred)
+    return img, label_pred
 def xml_parse(file):
     xml_parse = xml.etree.ElementTree.parse(file+'.xml').getroot()
 
@@ -171,8 +182,8 @@ def label_to_grid(label):
     return grid
 def run_demo(training):
     my_model = model.YOLO_v2().cuda()
-    state_dict = torch.load('./Weights/YOLO_v2_20.pt')
-    my_model.load_state_dict(state_dict)
+    # state_dict = torch.load('./Weights/YOLO_v2_20.pt')
+    # my_model.load_state_dict(state_dict)
     my_model.eval()
 
     grid_size = 7
@@ -180,15 +191,16 @@ def run_demo(training):
     test_loss = []
     accuracy = 0
     filepath = 'D:/DATASET/VOC_Dataset/VOC2012_trainval'
-    image_name = '2007_000042'
+    image_name = '2007_000063'
     
     test_image = cv.imread(filepath+'/JPEGImages/'+image_name+'.jpg', cv.IMREAD_COLOR)
     height, width, c = test_image.shape
     label = xml_parse(filepath+'/Annotations/'+image_name)
+    list_label = [label]
     label = label.split(' ')
 
     if training:
-        training_epoch = 5000
+        training_epoch = 4000
         my_model.train()
         optimizer = optim.Adam(my_model.parameters(), lr=1e-3, weight_decay=1e-5)
         criterion = losses.DetectionLoss().cuda()
@@ -196,9 +208,9 @@ def run_demo(training):
     else:
         training_epoch = 1
         my_model.eval()
-
+    img = test_image.copy()
     for epoch in range(training_epoch):
-        img = test_image.copy()
+
         model_input = cv.resize(test_image, (416, 416))
         model_input = (model_input / 255.).astype(np.float32)
         model_input = torch.from_numpy(model_input)
@@ -207,12 +219,6 @@ def run_demo(training):
         model_input = model_input.permute(2, 0, 1).unsqueeze(0).cuda()
 
         y_pred = my_model(model_input)
-        if training:
-            loss, loss1, loss2, conf = criterion(y_pred, label)
-            epoch_loss.append(loss.item())
-            if epoch % 100 == 0:  # and it > 0:
-                print("Step {0}/{1} Loss : {1:0.4f}, {2:0.4f}, {3:0.4f}, {4:0.4f}".format(epoch, training_epoch,
-                                                                 np.mean(epoch_loss), loss1, loss2, conf))
         for one_obj in range(0, len(label), 5):
             x, y, w, h, class_id = float(label[0 + one_obj]), float(label[1 + one_obj]), float(label[2 + one_obj]), \
                                    float(label[3 + one_obj]), int(label[4 + one_obj])
@@ -220,13 +226,24 @@ def run_demo(training):
             pt2 = int((x + w / 2) * int(width)), int((y + h / 2) * int(height))
             test_image = cv.rectangle(img=test_image, pt1=pt1, pt2=pt2, color=colors[class_id])
             cv.putText(test_image, category[class_id], pt1, cv.FONT_HERSHEY_TRIPLEX, 0.6, color=colors[class_id])
-        y_pred_img = post_processing_boxes(y_pred, img)
-        cv.imshow("Ground Truth", test_image)
-        cv.imshow("Prediction", y_pred_img)
+        y_pred_img, y_pred_label = post_processing_boxes(y_pred, img)
+
         if training:
             optimizer.zero_grad()
+            loss, loss1, loss2, conf = criterion(y_pred, list_label)
             loss.backward()
-        cv.waitKey(0)
+            optimizer.step()
+            epoch_loss.append(loss.item())
+            if epoch % 10 == 0:  # and it > 0:
+                print("Step {0}/{1} Loss : {2:0.4f}, {3:0.4f}, {4:0.4f}, {5:0.4f}".format(epoch, training_epoch,
+                                                                 np.mean(epoch_loss), loss1, loss2, conf))
+                print(y_pred_label)
+
+            if epoch % 100 == 0:
+                cv.imwrite('{0}_{1}.jpg'.format(image_name, epoch), y_pred_img)
+            cv.imshow("Ground Truth", test_image)
+            cv.imshow("Prediction", y_pred_img)
+            cv.waitKey(33)
 
 if __name__=="__main__":
-    run_demo(training=False)
+    run_demo(training=True)
