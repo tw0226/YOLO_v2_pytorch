@@ -12,6 +12,9 @@ from torch.autograd import Variable
 colors = [np.random.rand(3) * 255 for i in range(20)]
 category = ['aeroplane', 'bicycle', 'bird', 'boat', 'bottle', 'bus', 'car', 'cat', 'chair', 'cow', 'diningtable',
                 'dog', 'horse', 'motorbike', 'person', 'pottedplant', 'sheep', 'sofa', 'train', 'tvmonitor']
+anchors = [1.3221, 1.73145, 3.19275, 4.00944, 5.05587, 8.09892, 9.47112, 4.84053, 11.2364, 10.0071]
+anchors = np.array(anchors)
+
 def nms(boxes, probs, threshold):
     """Non-Maximum supression.
     Args:
@@ -67,18 +70,8 @@ def post_processing_boxes(y_pred, test_image, grid_size=13):
             for box in range(0, 125, 25):
                 y_pred[:, box + 0, x, y] = ((y_pred[:, box + 0, x, y] + x) * width / grid_size).astype(int)
                 y_pred[:, box + 1, x, y] = ((y_pred[:, box + 1, x, y] + x) * height / grid_size).astype(int)
-
-                # over_index = np.where(y_pred[:, box + 2, x, y] * width > width)
-                # if len(over_index) !=0:
-                #
-                # if y_pred[:, box + 2, x, y] * width > width:
-                #     y_pred[:, box + 2, x, y] = width
-                # else:
-                y_pred[:, box + 2, x, y] = (y_pred[:, box + 2, x, y] * width).astype(int)
-                # if int(y_pred[:, box + 3, x, y] * height) > height:
-                #     y_pred[:, box + 3, x, y] = height
-                # else:
-                y_pred[:, box + 3, x, y] = (y_pred[:, box + 3, x, y] * height).astype(int)
+                y_pred[:, box + 2, x, y] = (y_pred[:, box + 2, x, y] * anchors[int(box/25*2)] * width).astype(int)
+                y_pred[:, box + 3, x, y] = (y_pred[:, box + 3, x, y] * anchors[int(box/25*2)+1] * height).astype(int)
 
     for box in range(0, 125, 25):
         if box_pred is None:
@@ -96,8 +89,7 @@ def post_processing_boxes(y_pred, test_image, grid_size=13):
     scores_of_class = box_pred[:, :, 5:]
     under_threshold = np.where(scores_of_class<0.3)
     scores_of_class[under_threshold] = 0
-    # scores_of_class = scores_of_class.data.cpu().numpy()
-    # boxes = boxes.data.cpu().numpy()
+
     for batch in range(batch_size):
         one_label_pred = []
         for index in range(20):
@@ -169,7 +161,7 @@ def run_train():
             path = data[2][0]
             y_pred = my_model(x).cuda()
             gt = list(y)
-            loss, loss1, loss2, conf = criterion(y_pred, y)
+            loss = criterion(y_pred, y)
             loss = loss.cuda()
 
 
@@ -200,9 +192,10 @@ def run_train():
             #         img = cv.rectangle(img=img, pt1=pt1, pt2=pt2, color=colors[class_id])
 
             epoch_loss.append(loss.item())
-            if it % 300 == 0 : #and it > 0:
-                print("Step {0}/{1} Loss : {2:0.4f}, {3:0.4f}, {4:0.4f}, {5:0.4f} Accuracy : {6:0.2f} {7}/{8} ".format(it, len(train_data_loader),
-                            np.mean(epoch_loss), loss1, loss2, conf, sum_correct / sum, sum_correct, sum))
+            if it % 100 == 0 : #and it > 0:
+                print("Step {0}/{1} Loss : {2:0.4f}".format(it, len(train_data_loader), np.mean(epoch_loss)))
+                # print("Step {0}/{1} Loss : {2:0.4f}, {3:0.4f}, {4:0.4f}, {5:0.4f} Accuracy : {6:0.2f} {7}/{8} ".format(it, len(train_data_loader),
+                #             np.mean(epoch_loss), loss1, loss2, conf, sum_correct / sum, sum_correct, sum))
                 # pred, pred_img, pred_box = NonMaxSupression(y_pred, path, grid_size)
                 # cv.imshow("GroundTruth", img)
                 # cv.imshow("Prediction", pred_img)

@@ -7,26 +7,24 @@ from torch.autograd import Variable
 def mse(x, y):
     return (x-y)**2
 
-
 anchors = [1.3221, 1.73145, 3.19275, 4.00944, 5.05587, 8.09892, 9.47112, 4.84053, 11.2364, 10.0071]
 anchors = np.array(anchors)
 
 class DetectionLoss(nn.Module):
 
-    def compute_iou(self, box1, box2):
-
-        x1 = torch.max(box1[:, 0, :, :], box2[:, 0, :, :])
-        y1 = torch.max(box1[:, 1, :, :], box2[:, 1, :, :])
-        x2 = torch.min(box1[:, 2, :, :], box2[:, 2, :, :])
-        y2 = torch.min(box1[:, 3, :, :], box2[:, 3, :, :])
+    def compute_ious(self, box1, boxes):
+        x1 = torch.max(box1[0], boxes[0, :])
+        y1 = torch.max(box1[1], boxes[1, :])
+        x2 = torch.min(box1[2], boxes[2, :])
+        y2 = torch.min(box1[3], boxes[3, :])
         area_intersection = (x2 - x1 + 1) * (y2 - y1 + 1)
 
-        area_box1 = (box1[:, 2, :, :] - box1[:, 0, :, :] + 1) * (box1[:, 3, :, :] - box1[:, 1, :, :] + 1)
-        area_box2 = (box2[:, 2, :, :] - box2[:, 0, :, :] + 1) * (box2[:, 3, :, :] - box2[:, 1, :, :] + 1)
+        area_box1 = (box1[2] - box1[0] + 1) * (box1[3] - box1[1] + 1)
+        area_box2 = (boxes[2, :] - boxes[0, :] + 1) * (boxes[3, :] - boxes[1, :] + 1)
         area_union = area_box1 + area_box2 - area_intersection
         iou = area_intersection / area_union
-        return iou
 
+        return iou
     def forward(self, detection_result, gt):
         #c_x, c_y, w, h , conf, classes(20)
         batch_size = detection_result.shape[0]
@@ -36,124 +34,45 @@ class DetectionLoss(nn.Module):
         grid_size = 13
         gt = list(gt)
         gt_grid = torch.zeros(batch_size, 5 * (5 + num_class), grid_size, grid_size)
-        # gt_onefile
-        for batch in range(batch_size):
-            # print(batch, gt[batch])
-            grid = torch.zeros([5 * (5 + num_class), grid_size, grid_size]).cuda()
+        weight_grid = torch.zeros(batch_size, 5 * (5 + num_class), grid_size, grid_size)
 
+        # w, h with anchor boxes
+        for box in range(0, 5 * (bbox + num_class), bbox + num_class):
+            detection_result[:, box + 2, :, :] = detection_result[:, box + 2, :, :].clone() * anchors[int(box / 25 * 2)] / grid_size
+            detection_result[:, box + 3, :, :] = detection_result[:, box + 3, :, :].clone() * anchors[int(box / 25 * 2) + 1] / grid_size
+
+        for batch in range(batch_size):
             gt_one = gt[batch]
             gt_one = gt_one.split(' ')
             # print(gt_one)
-            count = 0
             for one_obj in range(0, len(gt_one), 5):
                 x, y, w, h, class_id = float(gt_one[0 + one_obj]), float(gt_one[1 + one_obj]), float(gt_one[2 + one_obj]), \
                                        float(gt_one[3 + one_obj]), int(gt_one[4 + one_obj])
+                one_obj_box = [x, y, w, h]
+                one_obj_box = torch.tensor(one_obj_box).cuda()
+                #해당 좌표에 대한 anchor box 만들기
+                anchor_boxes = torch.tensor([
+                                detection_result[batch, 0::25, int(x * grid_size), int(y * grid_size)].data.cpu().numpy(),
+                                detection_result[batch, 1::25, int(x * grid_size), int(y * grid_size)].data.cpu().numpy(),
+                                detection_result[batch, 2::25, int(x * grid_size), int(y * grid_size)].data.cpu().numpy(),
+                                detection_result[batch, 3::25, int(x * grid_size), int(y * grid_size)].data.cpu().numpy()]).cuda()
 
-                # GT의 1 grid 에서 객체가 여러 개일 때 grid 채널 이동
-                while grid[(count * 25) + 4, int(x * grid_size), int(y * grid_size)] == 1:
-                    if count == 4:
-                        break
-                    count += 1
-
-                grid[(count*25)+0, int(x * grid_size), int(y * grid_size)] = x * grid_size - int(x * grid_size)
-                grid[(count*25)+1, int(x * grid_size), int(y * grid_size)] = y * grid_size - int(y * grid_size)
-                grid[(count*25)+2, int(x * grid_size), int(y * grid_size)] = w
-                grid[(count*25)+3, int(x * grid_size), int(y * grid_size)] = h
-                grid[(count*25)+4, int(x * grid_size), int(y * grid_size)] = 1
-                grid[(count*25)+(bbox + int(class_id)), int(x * grid_size), int(y * grid_size)] = 1
-                count = 0
-
-            gt_grid[batch] = grid
-
+                #box1 대한 IOU 계산
+                index = np.argmax(self.compute_ious(one_obj_box , anchor_boxes))
+                #객체가 있는 곳의 Anchor Box channel에 (x,y,w,h,c, one_hot_class) 입력
+                gt_grid[batch, index*25:index*25+5, int(x * grid_size), int(y * grid_size)] = torch.tensor([x, y, w, h, 1])
+                one_hot_class = torch.zeros(20)
+                one_hot_class[class_id] = 1
+                gt_grid[batch, index * 25 + 5:index * 25 + 25, int(x * grid_size), int(y * grid_size)] = one_hot_class
+                weight_grid[batch, index * 25:index * 25 + 5, int(x * grid_size), int(y * grid_size)] = torch.tensor([5, 5, 5, 5, 1])
+                weight_grid[batch, index * 25 + 5:index * 25 + 25, int(x * grid_size), int(y * grid_size)] = torch.ones(20)
+            #객체가 없는 곳은 가중치를 0.5 로 만들기
+            _c, _x, _y = np.where(weight_grid[batch, 4::25, :, :] != 1)
+            weight_grid[batch, _c*25+4, _x, _y] = 0.5
 
         #loss 함수 만들기
         gt_grid = gt_grid.cuda()
+        weight_grid = weight_grid.cuda()
+        loss = mse((weight_grid * gt_grid), detection_result).mean()
 
-        loss_grid = torch.zeros(batch_size, 25, grid_size, grid_size).cuda()
-
-        gt_box = gt_grid[:, :5, :, :]
-
-        # w, h with anchor boxes
-        for box in range(0, 5*(bbox+num_class), bbox+num_class):
-            detection_result[:, box + 2, :, :] = detection_result[:, box + 2, :, :].clone() * anchors[int(box/25*2)] / grid_size
-            detection_result[:, box + 3, :, :] = detection_result[:, box + 3, :, :].clone() * anchors[int(box/25*2)+1] / grid_size
-            # print(detection_result[:, box + 2, :, :], detection_result[:, box + 3, :, :])
-
-        #calculate IOUs between gt, pred
-        ious = []
-        # best_bbox_index = 0
-        # max_iou = 0
-        max_iou = None
-        loss_grid = torch.zeros(batch_size, 25, grid_size, grid_size).cuda()
-
-        for box in range(0, 5 * (bbox + num_class), bbox + num_class):  # anchor box를 탐색하면서 각 grid마다 최고의 iou를 계산한다
-            box_one = detection_result[:, box:box+bbox, :, :].clone()
-            iou = self.compute_iou(gt_box, box_one).clone()
-            # confidence = iou.clone() * detection_result[:, box + 4, :, :].clone()
-            # detection_result[:, box + 4, :, :] = confidence.clone()
-            ious.append(iou)
-            if max_iou is None:
-                max_iou = iou
-            else:
-                max_index = np.where(max_iou < iou)
-                max_iou[max_index] = iou[max_index]
-            # if max_iou > 0:
-            #     best_bbox_index = box
-            #     max_iou = iou
-        for one in range(5):  # iou 가 제일 높은 곳 찾아서 계산...
-            index = np.where(max_iou == ious[one])
-            _b, _x, _y = index
-            if len(_b) !=0:
-                iou_one = ious[one]
-                detection_result[_b, one*25 + 4, _x, _y] = detection_result[_b, one*25 + 4, _x, _y] * iou_one[index]
-                detection_result[_b, one*25+5:one*25+25, _x, _y] = detection_result[_b, one*25 + 4, _x, _y].unsqueeze(1) * detection_result[_b, one*25+5:one*25+25, _x, _y]
-                loss_grid[_b, 0, _x, _y] = detection_result[_b, one * 25 + 0, _x, _y]
-                loss_grid[_b, 1, _x, _y] = detection_result[_b, one * 25 + 1, _x, _y]
-                loss_grid[_b, 2, _x, _y] = detection_result[_b, one * 25 + 2, _x, _y]
-                loss_grid[_b, 3, _x, _y] = detection_result[_b, one * 25 + 3, _x, _y]
-                loss_grid[_b, 4, _x, _y] = detection_result[_b, one * 25 + 4, _x, _y]
-                loss_grid[_b, 5:, _x, _y] = detection_result[_b, one * 25 + 5:one * 25 + 25, _x, _y]
-
-
-        # print(torch.max(ious, dim=0))
-        # _b, _x, _y = np.where(ious == torch.max(ious, dim=0)[0])
-
-        detection_result = detection_result.cuda()
-        lambda_coord = 5.0
-        lambda_noobj = 0.5
-        obj_loss, no_obj_loss = 0.0, 0.0
-        # c_x, c_y, w, h , conf, class0, class1
-        # obj가 있는 부분
-        one_img_obj, x_obj, y_obj = np.where(gt_grid[:, 4, :, :] == 1)
-
-        # for box in range(0, 125, 25):
-        obj_loss += lambda_coord * (mse(loss_grid[one_img_obj, 0, x_obj, y_obj], gt_grid[one_img_obj, 0, x_obj, y_obj]) +
-                                    mse(loss_grid[one_img_obj, 1, x_obj, y_obj], gt_grid[one_img_obj, 1, x_obj, y_obj]) +
-                                    mse(loss_grid[one_img_obj, 2, x_obj, y_obj], gt_grid[one_img_obj, 2, x_obj, y_obj]) +
-                                    mse(loss_grid[one_img_obj, 3, x_obj, y_obj], gt_grid[one_img_obj, 3, x_obj, y_obj])
-                                    ) + \
-                    mse(loss_grid[one_img_obj, 4, x_obj, y_obj], gt_grid[one_img_obj, 4, x_obj, y_obj])
-
-        # obj가 없는 부분
-        no_obj = []
-        one_img_noobj, x_noobj, y_noobj = np.where(gt_grid[:, 4, :, :] != 1)
-        # for box in range(0, 125, 25):
-        if len(one_img_noobj) != 0:
-            no_obj_loss += lambda_noobj * mse(loss_grid[one_img_noobj, 4, x_noobj, y_noobj], gt_grid[one_img_noobj, 4, x_noobj, y_noobj])
-
-        # probability of Class
-        confidence = 0
-        one_img_obj, x_obj, y_obj = np.where(gt_grid[:, 4, :, :] == 1)
-
-        # for box in range(0, 125, 25):
-        if len(one_img_obj) != 0:
-            confidence += mse(loss_grid[one_img_obj, 5:25, x_obj, y_obj], gt_grid[one_img_obj, 5:25, x_obj, y_obj])
-
-
-        obj_loss = obj_loss.mean()
-        no_obj_loss = no_obj_loss.mean()
-        confidence = confidence.mean()
-        # print(obj_loss, no_obj_loss, confidence)
-        loss = obj_loss + no_obj_loss + confidence
-        # print(loss)
-        return loss, obj_loss, no_obj_loss, confidence
+        return loss

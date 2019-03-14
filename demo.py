@@ -11,6 +11,8 @@ from collections import OrderedDict
 import xml.etree.ElementTree
 from torchvision import transforms
 
+anchors = [1.3221, 1.73145, 3.19275, 4.00944, 5.05587, 8.09892, 9.47112, 4.84053, 11.2364, 10.0071]
+anchors = np.array(anchors)
 colors = [np.random.rand(3) * 255 for i in range(20)]
 category = ['aeroplane', 'bicycle', 'bird', 'boat', 'bottle', 'bus', 'car', 'cat', 'chair', 'cow', 'diningtable',
                 'dog', 'horse', 'motorbike', 'person', 'pottedplant', 'sheep', 'sofa', 'train', 'tvmonitor']
@@ -97,14 +99,8 @@ def post_processing_boxes(y_pred, test_image, grid_size=13):
                 for box in range(0, 125, 25):
                     y_pred[box + 0, x, y] = int((y_pred[box + 0, x, y] + x) * width / grid_size)
                     y_pred[box + 1, x, y] = int((y_pred[box + 1, x, y] + y) * height / grid_size)
-                    if int(y_pred[box + 2, x, y] * width) > width:
-                        y_pred[box + 2, x, y] = width
-                    else:
-                        y_pred[box + 2, x, y] = int(y_pred[box + 2, x, y] * width)
-                    if int(y_pred[box + 3, x, y] * height) > height:
-                        y_pred[box + 3, x, y] = height
-                    else:
-                        y_pred[box + 3, x, y] = int(y_pred[box + 3, x, y] * height)
+                    y_pred[box + 2, x, y] = y_pred[box + 2, x, y] * anchors[int(box/25*2)]
+                    y_pred[box + 3, x, y] = y_pred[box + 3, x, y] * anchors[int(box/25*2)+1]
 
         for box in range(0, 125, 25):
             if box_pred is None:
@@ -116,7 +112,7 @@ def post_processing_boxes(y_pred, test_image, grid_size=13):
         box_pred = box_pred.reshape(5*13*13, 25)
         boxes = box_pred[:, :5]
         scores_of_class = box_pred[:, 5:]
-        under_threshold = np.where(scores_of_class<0.3)
+        under_threshold = np.where(scores_of_class<0.5)
         scores_of_class[under_threshold] = 0
         scores_of_class = scores_of_class.data.cpu().numpy()
         boxes = boxes.data.cpu().numpy()
@@ -141,7 +137,7 @@ def post_processing_boxes(y_pred, test_image, grid_size=13):
 
                     img = cv.rectangle(img=img, pt1=pt1, pt2=pt2, color=(colors[index]))
                     # print(cls, box_index, max_index, score)
-                    cv.putText(img, category[index], pt1, cv.FONT_HERSHEY_TRIPLEX, 0.4, color=colors[index])
+                    cv.putText(img, category[index] + str(score), pt1, cv.FONT_HERSHEY_TRIPLEX, 0.4, color=colors[index])
         label_pred.append(one_label_pred)
     return img, label_pred
 def xml_parse(file):
@@ -196,7 +192,6 @@ def label_to_grid(label):
             if count == 4:
                 break
             count += 1
-
         grid[(count * 25) + 0, int(x * grid_size), int(y * grid_size)] = x * grid_size - int(x * grid_size)
         grid[(count * 25) + 1, int(x * grid_size), int(y * grid_size)] = y * grid_size - int(y * grid_size)
         grid[(count * 25) + 2, int(x * grid_size), int(y * grid_size)] = w
@@ -207,16 +202,20 @@ def label_to_grid(label):
     return grid
 def run_demo(training):
     my_model = model.YOLO_v2().cuda()
-    # state_dict = torch.load('./Weights/YOLO_v2_20.pt')
-    # my_model.load_state_dict(state_dict)
-    my_model.eval()
+    # state_dict = torch.load('./Weights/YOLO_v2_135.pt')
+    # new_state_dict = OrderedDict()
+    # for k, v in state_dict.items():
+    #     name = k[7:]
+    #     new_state_dict[name] = v
+    # my_model.load_state_dict(new_state_dict)
+    # my_model.eval()
 
-    grid_size = 7
+    grid_size = 13
     criterion = losses.DetectionLoss().cuda()
     test_loss = []
     accuracy = 0
     filepath = 'D:/DATASET/VOC_Dataset/VOC2012_trainval'
-    image_name = '2007_000121'
+    image_name = '2007_000042'
     
     test_image = cv.imread(filepath+'/JPEGImages/'+image_name+'.jpg', cv.IMREAD_COLOR)
     height, width, c = test_image.shape
@@ -232,7 +231,7 @@ def run_demo(training):
         epoch_loss = []
     else:
         training_epoch = 1
-        my_model.eval()
+
     img = test_image.copy()
     for epoch in range(training_epoch):
 
@@ -252,8 +251,7 @@ def run_demo(training):
             test_image = cv.rectangle(img=test_image, pt1=pt1, pt2=pt2, color=colors[class_id])
             cv.putText(test_image, category[class_id], pt1, cv.FONT_HERSHEY_TRIPLEX, 0.6, color=colors[class_id])
         y_pred_img, y_pred_label = post_processing_boxes(y_pred.clone(), img)
-
-        correct, total = compute_iou_between_label(label, y_pred_label)
+        # correct, total = compute_iou_between_label(label, y_pred_label)
         if training:
             loss, loss1, loss2, conf = criterion(y_pred, list_label)
             loss = loss.cuda()
@@ -262,8 +260,10 @@ def run_demo(training):
             optimizer.step()
             epoch_loss.append(loss.item())
             if epoch % 1 == 0:  # and it > 0:
-                print("Step {0}/{1} Loss : {2:0.4f}, {3:0.4f}, {4:0.4f}, {5:0.4f} Accuracy : {6:0.2f} {7}/{8} ".format(epoch, training_epoch,
-                                                                 np.mean(epoch_loss), loss1, loss2, conf, correct/total, correct, total))
+                print("Step {0}/{1} Loss : {2:0.4f}, {3:0.4f}, {4:0.4f}, {5:0.4f} ".format(
+                    epoch, training_epoch, np.mean(epoch_loss), loss1, loss2, conf))
+                # print("Step {0}/{1} Loss : {2:0.4f}, {3:0.4f}, {4:0.4f}, {5:0.4f} Accuracy : {6:0.2f} {7}/{8} ".format(epoch, training_epoch,
+                #                                                  np.mean(epoch_loss), loss1, loss2, conf, correct/total, correct, total))
 
 
             if epoch % 100 == 0:
@@ -271,6 +271,9 @@ def run_demo(training):
             cv.imshow("Ground Truth", test_image)
             cv.imshow("Prediction", y_pred_img)
             cv.waitKey(33)
-
+        else:
+            cv.imshow("Ground Truth", test_image)
+            cv.imshow("Prediction", y_pred_img)
+            cv.waitKey(0)
 if __name__=="__main__":
     run_demo(training=True)
