@@ -8,7 +8,7 @@ import numpy as np
 import cv2 as cv
 import matplotlib.pyplot as plt
 from torch.autograd import Variable
-
+from collections import OrderedDict
 colors = [np.random.rand(3) * 255 for i in range(20)]
 category = ['aeroplane', 'bicycle', 'bird', 'boat', 'bottle', 'bus', 'car', 'cat', 'chair', 'cow', 'diningtable',
                 'dog', 'horse', 'motorbike', 'person', 'pottedplant', 'sheep', 'sofa', 'train', 'tvmonitor']
@@ -99,19 +99,19 @@ def post_processing_boxes(y_pred, test_image, grid_size=13):
                 if box_list[box] == False:
                     continue
                 x, y, w, h = boxes[batch, box, 0], boxes[batch, box, 1], boxes[batch, box, 2], boxes[batch, box, 3]
-                index = np.argmax(scores_of_class[batch, box, :])
+                max_index = np.argmax(scores_of_class[batch, box, :])
                 score = np.max(scores_of_class[batch, box, :])
                 if score > 0:
-                    one_label_pred.append([x,y,w,h, index])
+                    one_label_pred.append([x,y,w,h, max_index])
                     # print(category[index], score)
                     # print(scores[box, :], category[index], x, y, w, h)
 
                     pt1 = int(x - w / 2), int(y - h / 2)
                     pt2 = int(x + w / 2), int(y + h / 2)
                     # print(scores_of_class, cls, score)
-                    img = cv.rectangle(img=img, pt1=pt1, pt2=pt2, color=(colors[index]))
+                    img = cv.rectangle(img=img, pt1=pt1, pt2=pt2, color=(colors[max_index]))
                     # print(cls, box_index, max_index, score)
-                    cv.putText(img, category[index], pt1, cv.FONT_HERSHEY_TRIPLEX, 0.4, color=colors[index])
+                    cv.putText(img, category[max_index], pt1, cv.FONT_HERSHEY_TRIPLEX, 0.4, color=colors[max_index])
         return_img = torch.from_numpy(img)
         label_pred.append(one_label_pred)
     return return_img, label_pred
@@ -138,7 +138,13 @@ def run_train():
     train_data_loader = DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True, num_workers=4)
     val_data_loader = DataLoader(dataset=val_dataset, batch_size=batch_size, shuffle=True, num_workers=4)
     my_model = model.YOLO_v2().cuda()
-    # my_model.load_state_dict(torch.load('./Weights/YOLO_v1_tiny_min2.pt'))
+    state_dict = torch.load('./Weights/YOLO_v2_40.pt')
+    new_state_dict = OrderedDict()
+    for k, v in state_dict.items():
+        name = k[7:]
+        new_state_dict[name] = v
+    my_model.load_state_dict(new_state_dict)
+    my_model.eval()
     my_model.train()
     # my_model = torch.nn.DataParallel(model.YOLO_v1(), device_ids=[0]).cuda()
     # optimizer = optim.SGD(my_model.parameters(), lr=1e-3, momentum=0.9, weight_decay=5e-4)

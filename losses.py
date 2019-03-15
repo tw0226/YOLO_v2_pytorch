@@ -58,9 +58,15 @@ class DetectionLoss(nn.Module):
                                 detection_result[batch, 3::25, int(x * grid_size), int(y * grid_size)].data.cpu().numpy()]).cuda()
 
                 #box1 대한 IOU 계산
-                index = np.argmax(self.compute_ious(one_obj_box , anchor_boxes))
+                ious = self.compute_ious(one_obj_box, anchor_boxes)
+                index = np.argmax(ious)
+                # for box in range(5):
+                #     detection_result[batch, box*25+4, int(x * grid_size), int(y * grid_size)] = \
+                #         detection_result[batch, box*25+4, int(x * grid_size), int(y * grid_size)].clone() * ious[box]
+
                 #객체가 있는 곳의 Anchor Box channel에 (x,y,w,h,c, one_hot_class) 입력
-                gt_grid[batch, index*25:index*25+5, int(x * grid_size), int(y * grid_size)] = torch.tensor([x, y, w, h, 1])
+                gt_grid[batch, index*25:index*25+5, int(x * grid_size), int(y * grid_size)] = \
+                    torch.tensor([x*grid_size - int(x * grid_size), y * grid_size - int(y * grid_size), w, h, 1])
                 one_hot_class = torch.zeros(20)
                 one_hot_class[class_id] = 1
                 gt_grid[batch, index * 25 + 5:index * 25 + 25, int(x * grid_size), int(y * grid_size)] = one_hot_class
@@ -73,6 +79,33 @@ class DetectionLoss(nn.Module):
         #loss 함수 만들기
         gt_grid = gt_grid.cuda()
         weight_grid = weight_grid.cuda()
-        loss = mse((weight_grid * gt_grid), detection_result).mean()
+
+        loss = torch.sum(weight_grid * mse(gt_grid, detection_result))
+
+        # 어느 부분이 학습되고 있는지 확인용
+        obj_b, obj_c, obj_x, obj_y = np.where(gt_grid[:, 4::25, :, :] == 1)
+
+        obj_loss=0
+        for index in range(5):
+            obj_loss += weight_grid[obj_b, obj_c * 25 + index, obj_x, obj_y] * \
+                        mse(gt_grid[obj_b, obj_c * 25 + index, obj_x, obj_y],
+                            detection_result[obj_b, obj_c * 25 + index, obj_x, obj_y])
+
+
+        no_obj_b, no_obj_c, no_obj_x, no_obj_y = np.where(gt_grid[:, 4::25, :, :] != 1)
+        no_obj_loss = weight_grid[no_obj_b, no_obj_c * 25 + 4, no_obj_x, no_obj_y] * \
+                      mse(gt_grid[no_obj_b, no_obj_c * 25 + 4, no_obj_x, no_obj_y],
+                          detection_result[no_obj_b, no_obj_c * 25 + 4, no_obj_x, no_obj_y])
+        conf_loss = 0
+        conf_b, conf_c, conf_x, conf_y = np.where(gt_grid[:, 4::25, :, :] == 1)
+        for c_index in range(20):
+            conf_loss+= weight_grid[conf_b, conf_c*25+5+c_index, conf_x, conf_y] * \
+                        mse(gt_grid[conf_b, conf_c*25+5+c_index, conf_x, conf_y],
+                            detection_result[conf_b, conf_c*25+5+c_index, conf_x, conf_y])
+        obj_loss = obj_loss.sum()
+        no_obj_loss = no_obj_loss.sum()
+        conf_loss = conf_loss.sum()
+        # loss = obj_loss + no_obj_loss +conf_loss
+        print(loss, obj_loss, no_obj_loss, conf_loss)
 
         return loss
