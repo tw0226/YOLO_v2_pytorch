@@ -32,8 +32,8 @@ class YOLO_v2(nn.Module):
             nn.LeakyReLU(negative_slope=0.1))
         self.layer4 = nn.Sequential(
             nn.Conv2d(in_channels=1024, out_channels=(self.n_boxes * (5 + self.n_classes)), kernel_size=(3, 3), padding=1),
-            nn.BatchNorm2d((self.n_boxes * (5 + self.n_classes))),
-            nn.LeakyReLU(negative_slope=0.1))
+            nn.BatchNorm2d((self.n_boxes * (5 + self.n_classes))))
+            #nn.LeakyReLU(negative_slope=0.1))
 
 
     def forward(self, x):
@@ -44,9 +44,9 @@ class YOLO_v2(nn.Module):
         x = self.layer4(x)
 
         for box in range(0, self.n_boxes * (5 + self.n_classes), (5 + self.n_classes)):
-            x[:, box:box+2, :, :] = torch.sigmoid(x[:, box:box+2, :, :]).clone()  # x, y
-            x[:, box+2:box+4, :, :] = torch.exp(x[:, box+2:box+4, :, :]).clone()  # w, h
-            x[:, box+4:box+5, :, :] = torch.sigmoid(x[:, box+4:box+5, :, :]).clone()  # probability of object
-            softmax = nn.Softmax2d().cuda()
-            x[:, box + 5:box + 5 + self.n_classes, :, :] = softmax(x[:, box + 5:box + 5 + self.n_classes, :, :].clone())  #class
+            x[:, box:box+2, :, :] = torch.sigmoid(x[:, box:box+2, :, :])#.clone()  # x, y
+            x[:, box+2:box+4, :, :] = torch.exp(x[:, box+2:box+4, :, :])#.clone()  # w, h
+            x[:, box+4:box+5, :, :] = torch.sigmoid(x[:, box+4:box+5, :, :])#.clone()  # probability of object
+            # softmax = nn.Softmax2d().cuda()
+            x[:, box + 5:box + 5 + self.n_classes, :, :] = torch.sigmoid(x[:, box + 5:box + 5 + self.n_classes, :, :]) #.clone())  #class
         return x
