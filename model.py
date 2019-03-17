@@ -48,5 +48,7 @@ class YOLO_v2(nn.Module):
             x[:, box+2:box+4, :, :] = torch.exp(x[:, box+2:box+4, :, :])#.clone()  # w, h
             x[:, box+4:box+5, :, :] = torch.sigmoid(x[:, box+4:box+5, :, :])#.clone()  # probability of object
             # softmax = nn.Softmax2d().cuda()
+            # x[:, box + 5:box + 5 + self.n_classes, :, :] = softmax(x[:, box + 5:box + 5 + self.n_classes, :, :].clone())
             x[:, box + 5:box + 5 + self.n_classes, :, :] = torch.sigmoid(x[:, box + 5:box + 5 + self.n_classes, :, :]) #.clone())  #class
+
         return x

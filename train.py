@@ -138,21 +138,20 @@ def run_train():
     train_data_loader = DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True, num_workers=4)
     val_data_loader = DataLoader(dataset=val_dataset, batch_size=batch_size, shuffle=True, num_workers=4)
     my_model = model.YOLO_v2().cuda()
-    state_dict = torch.load('./Weights/YOLO_v2_40.pt')
-    new_state_dict = OrderedDict()
-    for k, v in state_dict.items():
-        name = k[7:]
-        new_state_dict[name] = v
-    my_model.load_state_dict(new_state_dict)
-    my_model.eval()
+    # state_dict = torch.load('./Weights/YOLO_v2_40.pt')
+    # new_state_dict = OrderedDict()
+    # for k, v in state_dict.items():
+    #     name = k[7:]
+    #     new_state_dict[name] = v
+    # my_model.load_state_dict(new_state_dict)
+    # my_model.eval()
     my_model.train()
-    # my_model = torch.nn.DataParallel(model.YOLO_v1(), device_ids=[0]).cuda()
-    # optimizer = optim.SGD(my_model.parameters(), lr=1e-3, momentum=0.9, weight_decay=5e-4)
+
     optimizer = optim.Adam(my_model.parameters(), lr=1e-3, weight_decay=1e-5)
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
     # scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer=optimizer, patience=5)
     training_epoch = 135
-    grid_size = 7
+    grid_size = 13
     criterion = losses.DetectionLoss().cuda()
     train_loss = []
     val_loss = []
