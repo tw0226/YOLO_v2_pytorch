@@ -26,14 +26,14 @@ class DetectionLoss(nn.Module):
         boxes_in_img[2] = boxes_in_img[0] + boxes[2]
         boxes_in_img[3] = boxes_in_img[1] + boxes[3]
 
-        x1 = torch.max(boxes_in_img[0], boxes_in_img[0, :])
-        y1 = torch.max(boxes_in_img[1], boxes_in_img[1, :])
-        x2 = torch.min(boxes_in_img[2], boxes_in_img[2, :])
-        y2 = torch.min(boxes_in_img[3], boxes_in_img[3, :])
+        x1 = torch.max(box1_in_img[0], boxes_in_img[0, :])
+        y1 = torch.max(box1_in_img[1], boxes_in_img[1, :])
+        x2 = torch.min(box1_in_img[2], boxes_in_img[2, :])
+        y2 = torch.min(box1_in_img[3], boxes_in_img[3, :])
 
         area_intersection = (x2 - x1 + 1) * (y2 - y1 + 1)
 
-        area_box1 = (boxes_in_img[2] - boxes_in_img[0] + 1) * (boxes_in_img[3] - boxes_in_img[1] + 1)
+        area_box1 = (box1_in_img[2] - box1_in_img[0] + 1) * (box1_in_img[3] - box1_in_img[1] + 1)
         area_box2 = (boxes_in_img[2, :] - boxes_in_img[0, :] + 1) * (boxes_in_img[3, :] - boxes_in_img[1, :] + 1)
         area_union = area_box1 + area_box2 - area_intersection
         iou = area_intersection / area_union
@@ -79,7 +79,7 @@ class DetectionLoss(nn.Module):
                 #calculation between iou1 and anchor boxes in object grid
                 ious = self.compute_ious(one_obj_box, anchor_boxes, int(y * grid_size), int(x * grid_size))
                 box_index = np.argmax(ious)
-
+                # print(ious, box_index)
                 #input (x,y,w,h,c, one_hot_of_class) to channel existing object
                 label_grid[batch, box_index*25:box_index*25+5, int(y * grid_size), int(x * grid_size)] = \
                     torch.tensor([x*grid_size - int(x * grid_size), y * grid_size - int(y * grid_size), w, h, 1])

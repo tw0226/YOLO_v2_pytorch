@@ -39,11 +39,9 @@ class YOLO_v2(nn.Module):
         x = self.layer2(x)
         x = self.layer3(x)
         x = self.layer4(x)
-
         for box in range(0, self.n_boxes * (5 + self.n_classes), (5 + self.n_classes)):
             x[:, box:box+2, :, :] = torch.sigmoid(x[:, box:box+2, :, :])  # x, y
             x[:, box+2:box+4, :, :] = torch.exp(x[:, box+2:box+4, :, :])  # w, h
             x[:, box+4:box+5, :, :] = torch.sigmoid(x[:, box+4:box+5, :, :])  # probability of object
             x[:, box + 5:box + 5 + self.n_classes, :, :] = torch.sigmoid(x[:, box + 5:box + 5 + self.n_classes, :, :])  #class
-
         return x

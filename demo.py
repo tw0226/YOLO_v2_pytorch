@@ -164,9 +164,10 @@ def post_processing_boxes(y_pred, test_image, grid_size=13):
                 for x_grid in range(13):
                     x, y, w, h, c = box_pred[box, :5, y_grid, x_grid]
                     class_prob = c * box_pred[box, 5:, y_grid, x_grid]
-                    under_score = np.where(class_prob < 0.3)[0]
-                    if len(under_score) != 0:
-                        class_prob[under_score] = 0
+
+                    # under_score = np.where(class_prob < 0.3)[0]
+                    # if len(under_score) != 0:
+                    #     class_prob[under_score] = 0
 
                     x = (x + x_grid) / 13
                     y = (y + y_grid) / 13
