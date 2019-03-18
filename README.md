@@ -1,6 +1,6 @@
 # YOLO_v2_pytorch
 
-Didn't used Non-Maximum Suppression
+Didn't use Non-Maximum Suppression
 
 
 <h1>Usage</h1>
