@@ -3,7 +3,7 @@
 Didn't used Non-Maximum Suppression
 
 
-<b1>Usage</b1>
+<h1>Usage</h1>
 
 (If you want <b>test one image training</b> or <b>one image show with pre-trained weight</b>)
 
@@ -12,7 +12,7 @@ Didn't used Non-Maximum Suppression
 3. run demo.py
 
 
-<b1>caution</b1>
+<h1>caution</h1>
 
 you can use this, but you need to implement additional code.(NMS, data augmentation, accuracy code)
 because i didn't apply data augmentation, can't expect high accuracy.
