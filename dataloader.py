@@ -31,11 +31,10 @@ class MyDataset:
 
         xml_parse = xml.etree.ElementTree.parse(label).getroot()
         category = ['aeroplane', 'bicycle', 'bird', 'boat', 'bottle', 'bus', 'car', 'cat', 'chair', 'cow', 'diningtable', 'dog', 'horse', 'motorbike', 'person', 'pottedplant', 'sheep', 'sofa', 'train', 'tvmonitor']
-        img_size = []
+
         for size in xml_parse.findall('size'):
             width = size.findtext('width')
             height = size.findtext('height')
-        # x_axis = width, y_axis = height
 
 
         classes = np.zeros(20).astype(int)
@@ -59,17 +58,8 @@ class MyDataset:
             label.append(x_width)
             label.append(y_height)
             label.append(category.index(name))
-            # label.append([x_center, y_center, x_width, y_height, category.index(name)])
         label = " ".join(repr(e) for e in label)
 
-        # print(label)`
-        # label = np.asarray(label).astype('float32')
-        # label = torch.from_numpy(label).cuda()
-        # label = label.unsqueeze(dim=0)
-        # img = img.unsqueeze(dim=0)
-        # print(img.shape, label.shape)
-        # cv2.waitKey(0)
-        # origin_img = torch.from_numpy(origin_img)
         return img, label, path
 
     def __len__(self):
