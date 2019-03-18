@@ -15,5 +15,7 @@ Didn't use Non-Maximum Suppression
 <h1>caution</h1>
 
 you can use this, but you need to implement additional code.(NMS, data augmentation, accuracy code)
+
 because i didn't apply data augmentation, can't expect high accuracy.
+
 This is just simple implementation, helping your understand.
