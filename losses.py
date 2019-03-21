@@ -12,29 +12,32 @@ anchors = np.array(anchors)
 
 class DetectionLoss(nn.Module):
 
-    def compute_ious(self, box1, boxes, y_offset, x_offset):
+    def compute_ious(self, box1, anchor_boxes, y_offset, x_offset):
         # change grid( center_x, center_y, w, h ) for iou computation
         box1_xmin = box1[0] - box1[2] / 2
         box1_ymin = box1[1] - box1[3] / 2
         box1_xmax = box1[0] + box1[2] / 2
         box1_ymax = box1[1] + box1[3] / 2
-        box1_in_img = [box1_xmin, box1_ymin, box1_xmax, box1_ymax]
 
-        boxes_in_img = torch.zeros(boxes.shape)
-        boxes_in_img[0] = (boxes[0] + x_offset) / 13 - boxes[2]/2
-        boxes_in_img[1] = (boxes[1] + y_offset) / 13 - boxes[3]/2
-        boxes_in_img[2] = boxes_in_img[0] + boxes[2]
-        boxes_in_img[3] = boxes_in_img[1] + boxes[3]
+        boxes_xmin = anchor_boxes[0]
+        boxes_ymin = anchor_boxes[1]
+        boxes_width = anchor_boxes[2]
+        boxes_height = anchor_boxes[3]
 
-        x1 = torch.max(box1_in_img[0], boxes_in_img[0, :])
-        y1 = torch.max(box1_in_img[1], boxes_in_img[1, :])
-        x2 = torch.min(box1_in_img[2], boxes_in_img[2, :])
-        y2 = torch.min(box1_in_img[3], boxes_in_img[3, :])
+        boxes_xmin = (boxes_xmin + x_offset) / 13 - boxes_width / 2
+        boxes_ymin = (boxes_ymin + y_offset) / 13 - boxes_height / 2
+        boxes_xmax = boxes_xmin + boxes_width
+        boxes_ymax = boxes_ymin + boxes_height
+
+        x1 = torch.max(box1_xmin, boxes_xmin)
+        y1 = torch.max(box1_ymin, boxes_ymin)
+        x2 = torch.min(box1_xmax, boxes_xmax)
+        y2 = torch.min(box1_ymax, boxes_ymax)
 
         area_intersection = (x2 - x1 + 1) * (y2 - y1 + 1)
 
-        area_box1 = (box1_in_img[2] - box1_in_img[0] + 1) * (box1_in_img[3] - box1_in_img[1] + 1)
-        area_box2 = (boxes_in_img[2, :] - boxes_in_img[0, :] + 1) * (boxes_in_img[3, :] - boxes_in_img[1, :] + 1)
+        area_box1 = (box1_xmax - box1_xmin + 1) * (box1_ymax - box1_ymin + 1)
+        area_box2 = (boxes_xmax - boxes_xmin + 1) * (boxes_ymax - boxes_ymin + 1)
         area_union = area_box1 + area_box2 - area_intersection
         iou = area_intersection / area_union
         
@@ -44,7 +47,7 @@ class DetectionLoss(nn.Module):
         # output = (batch, 125, 13, 13)
         # 125 =  ( c_x, c_y, w, h , conf, classes(20) ) * 5
         batch_size = model_output.shape[0]
-        bbox = 5
+        num_anchor_boxes = 5
         grid_size = 13
         num_class = 20
 
@@ -55,18 +58,18 @@ class DetectionLoss(nn.Module):
         weight_grid = torch.zeros(batch_size, 5 * (5 + num_class), grid_size, grid_size)
 
         # w, h with anchor boxes
-        for box in range(0, 5 * (bbox + num_class), bbox + num_class):
+        for box in range(0, 5 * (num_anchor_boxes + num_class), num_anchor_boxes + num_class):
             model_output[:, box + 2, :, :] = model_output[:, box + 2, :, :] * anchors[int(box / 25 * 2)] / grid_size
             model_output[:, box + 3, :, :] = model_output[:, box + 3, :, :] * anchors[int(box / 25 * 2) + 1] / grid_size
 
         # loss function
         for batch in range(batch_size):
-            label_of_batch = text_label[batch]
-            label_of_batch = label_of_batch.split(' ')
-            # print(label_of_batch)
-            for one_obj in range(0, len(label_of_batch), 5):
-                x, y, w, h, class_id = float(label_of_batch[0 + one_obj]), float(label_of_batch[1 + one_obj]), float(label_of_batch[2 + one_obj]), \
-                                       float(label_of_batch[3 + one_obj]), int(label_of_batch[4 + one_obj])
+            gt_boxes = text_label[batch]
+            gt_boxes = gt_boxes.split(' ')
+            # print(gt_boxes)
+            for one_obj in range(0, len(gt_boxes), 5):
+                x, y, w, h, class_id = float(gt_boxes[0 + one_obj]), float(gt_boxes[1 + one_obj]), float(gt_boxes[2 + one_obj]), \
+                                       float(gt_boxes[3 + one_obj]), int(gt_boxes[4 + one_obj])
                 one_obj_box = [x, y, w, h]
                 one_obj_box = torch.tensor(one_obj_box)#.cuda()
                 # making acnchor box in object grid.
@@ -97,7 +100,7 @@ class DetectionLoss(nn.Module):
         label_grid = label_grid.cuda()
         weight_grid = weight_grid.cuda()
 
-        loss = torch.sum(weight_grid * (label_grid- model_output) * (label_grid - model_output))
+        loss = torch.sum(weight_grid * (label_grid - model_output) * (label_grid - model_output))
 
         ### check which grid is learning well ###
 

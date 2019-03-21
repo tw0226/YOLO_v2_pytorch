@@ -30,9 +30,9 @@ def run_demo(filepath, image_name, training):
     
     test_image = cv.imread(filepath + '/JPEGImages/' + image_name + '.jpg', cv.IMREAD_COLOR)
     height, width, c = test_image.shape
-    label = xml_parse(filepath + '/Annotations/' + image_name)
-    list_label = [label]
-    label = label.split(' ')
+    gt_boxes = xml_parse(filepath + '/Annotations/' + image_name)
+    list_gt_boxes = [gt_boxes]
+    gt_boxes = gt_boxes.split(' ')
     _normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 
     if training:
@@ -62,10 +62,10 @@ def run_demo(filepath, image_name, training):
         model_input = _normalize(model_input)
         model_input = model_input.permute(2, 0, 1).unsqueeze(0).cuda()
         y_pred = my_model(model_input)
-        #show text_label to img
-        for one_obj in range(0, len(label), 5):
-            x, y, w, h, class_id = float(label[0 + one_obj]), float(label[1 + one_obj]), float(label[2 + one_obj]), \
-                                   float(label[3 + one_obj]), int(label[4 + one_obj])
+        #show text_gt_boxes to img
+        for one_obj in range(0, len(gt_boxes), 5):
+            x, y, w, h, class_id = float(gt_boxes[0 + one_obj]), float(gt_boxes[1 + one_obj]), float(gt_boxes[2 + one_obj]), \
+                                   float(gt_boxes[3 + one_obj]), int(gt_boxes[4 + one_obj])
             pt1 = int((x - w / 2) * int(width)), int((y - h / 2) * int(height))
             pt2 = int((x + w / 2) * int(width)), int((y + h / 2) * int(height))
             center_point = int(x * width), int(y * height)
@@ -75,7 +75,7 @@ def run_demo(filepath, image_name, training):
         
             
         if training:
-            loss, obj_loss, no_obj_loss, conf_loss = criterion(y_pred, list_label)
+            loss, obj_loss, no_obj_loss, conf_loss = criterion(y_pred, list_gt_boxes)
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
@@ -224,8 +224,6 @@ def xml_parse(file):
         # label.append([x_center, y_center, x_width, y_height, category.index(name)])
     label = " ".join(repr(e) for e in label)
     return label
-
-
 
 
 if __name__ == "__main__":
